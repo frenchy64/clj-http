@@ -167,6 +167,51 @@
             (is (= params (read-fn (:body @resp))))
             (is (not (realized? exception)))))))))
 
+(deftest ^:integration roundtrip-async-future
+  (run-server)
+  (testing "roundtrip with scheme as keyword"
+    (let [resp (request {:uri "/get" :method :get
+                         :async-future? true})]
+      (is (= 200 (:status @resp)))
+      (is (= "close" (get-in @resp [:headers "connection"])))
+      (is (= "get" (:body @resp)))))
+  (testing "roundtrip with scheme as string"
+    (let [resp (request {:uri "/get" :method :get
+                         :scheme "http"
+                         :async-future? true})]
+      (is (= 200 (:status @resp)))
+      (is (= "close" (get-in @resp [:headers "connection"])))
+      (is (= "get" (:body @resp)))))
+  (testing "response parsing"
+    (let [params {:a "1" :b "2"}]
+      (doseq [[content-type read-fn]
+              [[nil (comp parse-form-params slurp)]
+               [:x-www-form-urlencoded (comp parse-form-params slurp)]
+               [:edn (comp read-string slurp)]
+               [:transit+json #(client/parse-transit % :json)]
+               [:transit+msgpack #(client/parse-transit % :msgpack)]]]
+        (let [resp (request {:uri "/post"
+                             :as :stream
+                             :method :post
+                             :content-type content-type
+                             :flatten-nested-keys []
+                             :form-params params
+                             :async-future? true})]
+          (is (= 200 (:status @resp)))
+          (is (= "close" (get-in @resp [:headers "connection"])))
+          (is (= params (read-fn (:body @resp))))))))
+  (testing "error handling"
+    (let [resp (request {:uri "/error" :method :get
+                         :async-future? true})]
+      (is (thrown? java.util.concurrent.ExecutionException
+                   @resp))))
+  (testing "can be cancelled"
+    (let [resp (request {:uri "/timeout" :method :get
+                         :async-future? true})]
+      (.cancel resp false)
+      (is (thrown? java.util.concurrent.CancellationException
+                   @resp)))))
+
 (def ^:dynamic *test-dynamic-var* nil)
 
 (deftest ^:integration async-preserves-dynamic-variable-bindings

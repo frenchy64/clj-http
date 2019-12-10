@@ -13,6 +13,7 @@
             [slingshot.slingshot :refer [throw+]])
   (:import (java.io InputStream File ByteArrayOutputStream ByteArrayInputStream EOFException BufferedReader)
            (java.net URL UnknownHostException)
+           (java.util.concurrent Future ExecutionException CancellationException)
            (org.apache.http.entity BufferedHttpEntity ByteArrayEntity
                                    InputStreamEntity FileEntity StringEntity)
            (org.apache.http.impl.conn PoolingHttpClientConnectionManager)
@@ -1135,6 +1136,30 @@
            (throw (IllegalArgumentException. "If :async? is true, you must pass respond and raise")))
          (client req respond raise))
 
+       (opt req :async-future)
+       (let [result   (promise)
+             unwrap   (fn [[type response-or-error]]
+                        (case type
+                          :respond response-or-error
+                          :raise   (throw (ExecutionException. response-or-error))
+                          :cancelled (throw (CancellationException. "User cancelled request"))))
+             respond  #(deliver result [:respond %])
+             raise    #(deliver result [:raise %])
+             oncancel #(deliver result [:cancelled])
+             basic-future (client (-> req
+                                      (dissoc :async-future :async-future?)
+                                      (assoc :async true
+                                             :oncancel oncancel))
+                                  respond
+                                  raise)]
+         (reify
+           Future
+           (get [_] (unwrap (deref result)))
+           (get [_ timeout unit] (unwrap (deref result timeout unit)))
+           (isCancelled [_] (.isCancelled basic-future))
+           (isDone [_] (.isRealized result))
+           (cancel [_ interrupt?] (.cancel basic-future interrupt?))))
+
        :else
        (client req)))
 
@@ -1172,6 +1197,9 @@
   * :async?
   * :respond
   * :raise
+
+  To make an async HTTP request and wrap the result in a future, set the
+  key :async-future to true.
 
   The following additional behaviors are also automatically enabled:
   * Exceptions are thrown for status codes other than 200-207, 300-303, or 307
