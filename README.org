@@ -72,7 +72,6 @@
 - [[#other-libraries-providing-middleware][Other Libraries Providing Middleware]]
 - [[#license][License]]
 
-
 * Branches
 :PROPERTIES:
 :CUSTOM_ID: h-e390585c-cbd8-4e94-b36b-4e9c27c16720
@@ -428,12 +427,19 @@ start an async request is easy, for example:
 
 #+BEGIN_SRC clojure
 ;; :async? in options map need to be true
-(client/get "http://example.com"
-            {:async? true}
-            ;; respond callback
-            (fn [response] (println "response is:" response))
-            ;; raise callback
-            (fn [exception] (println "exception message is: " (.getMessage exception))))
+  (client/get "http://example.com"
+              {:async true }
+              ;; respond callback
+              (fn [response] (println "response is:" response))
+              ;; raise callback
+              (fn [exception] (println "exception message is: " (.getMessage exception))))
+
+  ;; equivalent using request
+  (client/request {:method :get
+                   :url "http://example.com"
+                   :async true
+                   :respond (fn [response] (println "response is:" response))
+                   :raise (fn [exception] println "exception message is: " (.getMessage exception))})
 #+END_SRC
 
 All exceptions thrown during the request will be passed to the raise callback.
