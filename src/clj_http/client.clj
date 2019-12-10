@@ -1128,11 +1128,10 @@
   "Returns a batteries-included HTTP request function corresponding to the given
   core client. See default-middleware for the middleware wrappers that are used
   by default"
-  [request]
-  (reduce (fn wrap-request* [request middleware]
-            (middleware request))
-          request
-          default-middleware))
+  ([request]
+   (wrap-request request default-middleware))
+  ([request middleware]
+   (reduce #(%2 %1) request middleware)))
 
 (def ^:dynamic request
   "Executes the HTTP request corresponding to the given map and returns
@@ -1241,9 +1240,7 @@
   [middleware & body]
   `(let [m# ~middleware]
      (binding [*current-middleware* m#
-               clj-http.client/request (reduce #(%2 %1)
-                                               clj-http.core/request
-                                               m#)]
+               clj-http.client/request (wrap-request clj-http.core/request m#)]
        ~@body)))
 
 (defmacro with-additional-middleware
